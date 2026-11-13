@@ -61,8 +61,6 @@ FULLDSKT [lecteur:] [/Y] [/K] [/V] [/?]
 
 ```text
 FULLDISKTEST/
-├── .gemini/
-│   └── instructions.md     # Spécifications techniques 16 bits et contraintes C89
 ├── build/
 │   └── FULLDSKT.EXE        # Exécutable MS-DOS 16 bits compilé
 ├── script/
