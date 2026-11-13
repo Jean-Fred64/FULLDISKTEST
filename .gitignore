@@ -11,3 +11,6 @@ tools/
 test/work*.img
 test/RESULT.TXT
 test/output.txt
+
+# Configuration locale IDE
+.gemini/
