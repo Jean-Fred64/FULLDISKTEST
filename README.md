@@ -27,21 +27,25 @@
 Copiez `FULLDSKT.EXE` sur votre disque dur (`C:\DOS\` ou `C:\UTILS\`) ou sur une disquette système distincte du lecteur à tester.
 
 ```dos
-FULLDSKT [lecteur:] [/Y] [/K] [/V] [/?]
+FULLDSKT [A:|B:] [/Y] [/K] [/V] [/?]
 ```
 
 ### Paramètres et commutateurs
 
 | Option | Description |
 | :--- | :--- |
-| `A:` ou `B:` | Lecteur de disquette cible (par défaut : `A:`). |
-| `/Y` | Mode automatique : supprime automatiquement les fichiers `.H2W` en fin de test sans demander de confirmation clavier. |
-| `/K` | *Keep* : conserve les fichiers de test (`Bxx.H2W` et `Sxx.H2W`) sur la disquette à l'issue de l'écriture et de la vérification (utile pour tester la rétention magnétique à froid ou sur un second lecteur). |
-| `/V` | *Verify only* : saute la phase d'écriture et vérifie directement l'intégrité des fichiers `.H2W` déjà présents sur la disquette (créés précédemment avec `/K`). |
-| `/?` | Affiche l'aide et les options disponibles. |
+| `A:` ou `B:` | Lecteur de disquette cible (par défaut : `A:`, sécurisé uniquement sur `A:` et `B:`). |
+| `/Y` (ou `-Y`) | Mode automatique : supprime automatiquement les fichiers `.H2W` en fin de test sans demander de confirmation clavier. |
+| `/K` (ou `-K`) | *Keep* : conserve les fichiers de test (`Bxx.H2W` et `Sxx.H2W`) sur la disquette à l'issue de l'écriture et de la vérification (utile pour tester la rétention magnétique à froid ou sur un second lecteur). |
+| `/V` (ou `-V`) | *Verify only* : saute la phase d'écriture et vérifie directement l'intégrité des fichiers `.H2W` déjà présents sur la disquette (créés précédemment avec `/K`). |
+| `/?` (ou `-?`, `/H`, `-H`, `--help`) | Affiche la bannière `v1.0.1 (13/11/2026)` et l'écran d'aide complet calibré pour 80×25, puis quitte avec le code retour `0`. |
 
 ### Exemples d'utilisation
 
+* **Affichage de l'écran d'aide complet :**
+  ```dos
+  FULLDSKT /?
+  ```
 * **Test complet standard sur le lecteur A: (avec confirmation avant nettoyage) :**
   ```dos
   FULLDSKT A:
@@ -61,9 +65,23 @@ FULLDSKT [lecteur:] [/Y] [/K] [/V] [/?]
   SCRIPT\FULLDSKT A:
   ```
 
-### Exemple de sortie console (`FULLDSKT.EXE A:`)
+### Exemple de sortie console (`FULLDSKT.EXE A: /Y`)
 
 ```text
+====================================================================
+  FULLDSKT v1.0.1 (13/11/2026) - TEST INTEGRAL TYPE H2TESTW
+  Compatible 8086/8088 & MS-DOS 3.30-6.22
+====================================================================
+Lecteur cible : A:
+Inserez une disquette formatee et vide dans A:
+
+--- Geometrie du media detectee sur A: ---
+  Format        : 5,25" 360 Ko (DS/DD, 40 pistes, 9 sect/piste)
+  Capacite      : 360 Ko (720 secteurs de 512 octets)
+  Geometrie CHS : 40 cylindres, 2 tete(s), 9 secteurs/piste
+  Cluster FAT12 : 2 secteur(s)/cluster (1024 octets), 112 entrees racine
+  Zone donnees  : debut LBA 12 | Espace libre : 362496 octets
+
 [1/4] Initialisation du motif de reference en memoire (32 Ko)...
 [2/4] Ecriture     : [##############################] 100%
 [3/4] Saturation des derniers secteurs libres par blocs de 512 octets...

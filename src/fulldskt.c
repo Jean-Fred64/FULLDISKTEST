@@ -10,10 +10,18 @@
 #include <dos.h>
 #include <fcntl.h>
 
+#define APP_NAME      "FULLDSKT"
+#define APP_VERSION   "v1.0.1"
+#define APP_DATE      "13/11/2026"
+
 #define BLOCK32K_SIZE 32768U
 #define BLOCK512_SIZE 512U
 #define MAX_B_FILES   100U
 #define MAX_S_FILES   100U
+
+/* Chaine d'identification statique conservee dans le segment de donnees */
+static const char app_ident[] =
+    APP_NAME " " APP_VERSION " (" APP_DATE ") - 16-bit DOS Floppy Integrity Tester";
 
 /* Tampon principal de 32 Ko en segment de donnees statique (pile DOS preservee) */
 static unsigned char buffer[BLOCK32K_SIZE];
@@ -429,6 +437,36 @@ static void update_verify_progress(unsigned long bytes_verified,
     update_progress("[4/4] Verification", bytes_verified, total_verify_bytes, reset);
 }
 
+/* Affichage de la banniere principale (strictement < 80 colonnes) */
+static void print_banner(void)
+{
+    if (app_ident[0] != '\0') {
+        printf("====================================================================\n");
+        printf("  " APP_NAME " " APP_VERSION " (" APP_DATE ") - TEST INTEGRAL TYPE H2TESTW\n");
+        printf("  Compatible 8086/8088 & MS-DOS 3.30-6.22\n");
+        printf("====================================================================\n");
+    }
+}
+
+/* Affichage de l'ecran d'aide /? (calibre pour console 80x25 sans defilement) */
+static void print_help(void)
+{
+    print_banner();
+    printf("Usage : FULLDSKT [A:|B:] [/Y] [/K] [/V] [/?]\n\n");
+    printf("Parametres et commutateurs :\n");
+    printf("  A: ou B:  Lecteur de disquette cible (par defaut : A:, securise A:/B:)\n");
+    printf("  /Y        Mode automatique : supprime les fichiers .H2W en fin de test\n");
+    printf("            sans demander de confirmation clavier\n");
+    printf("  /K        Keep : conserve les fichiers Bxx.H2W et Sxx.H2W sur la\n");
+    printf("            disquette (test de retention magnetique ou 2nd lecteur)\n");
+    printf("  /V        Verify only : saute l'ecriture et verifie directement les\n");
+    printf("            fichiers .H2W deja presents (crees avec /K)\n");
+    printf("  /?        Affiche cet ecran d'aide et les options disponibles\n\n");
+    printf("Phases du test :\n");
+    printf("  [1/4] Motif deterministe (32 Ko)    [3/4] Saturation 512 o (Sxx.H2W)\n");
+    printf("  [2/4] Ecriture blocs 32 Ko (Bxx)    [4/4] Purge caches & verification\n");
+}
+
 int main(int argc, char *argv[])
 {
     unsigned int drive_num;
@@ -478,8 +516,14 @@ int main(int argc, char *argv[])
     /* Analyse des arguments de la ligne de commande */
     for (arg_idx = 1; arg_idx < argc; arg_idx++) {
         const char *arg = argv[arg_idx];
-        if (strcmp(arg, "A:") == 0 || strcmp(arg, "a:") == 0 ||
-            strcmp(arg, "A") == 0  || strcmp(arg, "a") == 0) {
+        if (strcmp(arg, "/?") == 0 || strcmp(arg, "-?") == 0 ||
+            strcmp(arg, "/h") == 0 || strcmp(arg, "/H") == 0 ||
+            strcmp(arg, "-h") == 0 || strcmp(arg, "-H") == 0 ||
+            stricmp(arg, "--help") == 0) {
+            print_help();
+            return 0;
+        } else if (strcmp(arg, "A:") == 0 || strcmp(arg, "a:") == 0 ||
+                   strcmp(arg, "A") == 0  || strcmp(arg, "a") == 0) {
             drive_num    = 1U;
             bios_drive   = 0x00U;
             drive_letter = 'A';
@@ -499,7 +543,7 @@ int main(int argc, char *argv[])
             verify_only = 1U;
         } else {
             printf("\n[ERREUR] Argument invalide : %s\n", arg);
-            printf("Usage : FULLDSKT [A: | B:] [/Y] [/K] [/V]\n");
+            printf("Usage : FULLDSKT [A:|B:] [/Y] [/K] [/V] [/?]\n");
             printf("Seuls les lecteurs de disquette A: et B: sont autorises.\n");
             return 1;
         }
@@ -527,9 +571,7 @@ int main(int argc, char *argv[])
     /* Installation du gestionnaire d'erreurs critiques DOS (INT 24h) */
     _harderr(crit_err_handler);
 
-    printf("==========================================================\n");
-    printf("  FULLDSKT : TEST INTEGRAL TYPE H2TESTW (MS-DOS 3.30-6.22)\n");
-    printf("==========================================================\n");
+    print_banner();
     printf("Lecteur cible : %c:\n", drive_letter);
     printf("Inserez une disquette formatee et vide dans %c:\n", drive_letter);
 
