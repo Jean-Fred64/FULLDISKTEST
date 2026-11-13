@@ -13,10 +13,12 @@
 * **Saturation totale jusqu'à 0 octet libre** :
   1. Écriture séquentielle par blocs de **32 Ko** (`B00.H2W`, `B01.H2W`…).
   2. Saturation des derniers clusters libres par blocs de **512 octets** (`S00.H2W`, `S01.H2W`…) tout en respectant la limite des **112 entrées** du répertoire racine des disquettes 360 Ko et 720 Ko.
+* **Barres de progression ASCII 7 bits en temps réel** : Affichage de la progression (`#` / `.`, largeur 30 caractères) avec rafraîchissement différentiel optimisé pour processeurs **8086/8088** (mise à jour sur changement de pourcentage ou de segment uniquement via `\r`), intégré aux étapes `[2/4]` (écriture des blocs de 32 Ko) et `[4/4]` (vérification binaire).
 * **Purge des caches avant relecture** : Vidage des tampons internes MS-DOS (`INT 21h AH=0Dh`), vidage du cache SmartDrive (`INT 2Fh AX=4A10h BX=0001h`) et réinitialisation matérielle du contrôleur disquette (`INT 13h AH=00h`).
 * **Diagnostic physique CHS précis** : En cas d'erreur de lecture ou de divergence binaire entre l'octet écrit et l'octet relu, résolution de la chaîne de clusters FAT12 et affichage exact du secteur logique (**LBA**) et de sa position physique (**Cylindre, Tête, Secteur**).
 * **Gestion des erreurs critiques (`INT 24h`)** : Détournement du gestionnaire d'erreurs critiques DOS (`_HARDERR_FAIL`) afin d'éviter le blocage sur l'invite interactive *"Abandon, Reprise, Échec ?"* lors de la rencontre d'un secteur physiquement illisible ou d'une disquette protégée en écriture.
 * **Sécurité anti-écrasement** : Interdiction stricte de cibler un disque dur (`C:` ou supérieur) et interdiction d'exécuter `FULLDSKT.EXE` depuis le lecteur en cours de test.
+* **Alternative script MS-DOS pur (`script/FULLDSKT.BAT`)** : Script batch autonome compatible **MS-DOS 3.30 à 6.22**, supportant l'invocation avec ou sans extension `.BAT` (depuis la racine ou le sous-dossier `SCRIPT\`), avec contrôle de sécurité empêchant l'exécution depuis `A:` ou `B:`.
 
 ---
 
@@ -54,6 +56,30 @@ FULLDSKT [lecteur:] [/Y] [/K] [/V] [/?]
   REM --- Plus tard ou sur un autre lecteur ---
   FULLDSKT A: /Y /V
   ```
+* **Exécution de l'alternative script MS-DOS pur (`script/FULLDSKT.BAT`) :**
+  ```dos
+  SCRIPT\FULLDSKT A:
+  ```
+
+### Exemple de sortie console (`FULLDSKT.EXE A:`)
+
+```text
+[1/4] Initialisation du motif de reference en memoire (32 Ko)...
+[2/4] Ecriture     : [##############################] 100%
+[3/4] Saturation des derniers secteurs libres par blocs de 512 octets...
+  Secteur S00.H2W (512 o) [OK]
+  Secteur S01.H2W (512 o) [OK]
+  Saturation terminee : 11 bloc(s) de 32 Ko, 2 bloc(s) de 512 o (0 octets libres).
+[4/4] Purge des caches (DOS + SmartDrive) et verification physique...
+[4/4] Verification : [##############################] 100%
+
+==========================================================
+  SUCCES : 100% des secteurs ecrits et relus sans erreur !
+==========================================================
+  Octets ecrits   : 361472 octets (13 fichiers .H2W)
+  Octets verifies : 361472 octets
+  Octets libres   : 0 octets sur A:
+```
 
 ---
 
@@ -62,9 +88,9 @@ FULLDSKT [lecteur:] [/Y] [/K] [/V] [/?]
 ```text
 FULLDISKTEST/
 ├── build/
-│   └── FULLDSKT.EXE        # Exécutable MS-DOS 16 bits compilé
+│   └── FULLDSKT.EXE        # Exécutable MS-DOS 16 bits compilé (v1.0.1)
 ├── script/
-│   └── FULLDSKT.BAT        # Prototype batch d'origine
+│   └── FULLDSKT.BAT        # Alternative script MS-DOS pur (3.30–6.22)
 ├── src/
 │   └── fulldskt.c          # Code source C89 complet (mode réel 16 bits)
 ├── test/
