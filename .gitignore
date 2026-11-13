@@ -1,0 +1,13 @@
+# Fichiers temporaires de compilation Open Watcom
+*.obj
+*.lnk
+*.err
+
+# Installateurs locaux et outils lourds
+Tools/
+tools/
+
+# Artefacts de test DOSBox-X
+test/work*.img
+test/RESULT.TXT
+test/output.txt
