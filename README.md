@@ -114,3 +114,10 @@ L'ensemble des formats FAT12 a été validé en boucle fermée sous **DOSBox-X**
 | **3,5" 1,44 Mo (DS/HD)** | 80 / 2 / 18 | 44 × 32 Ko + 31 × 512 o | 1 457 664 octets (`0` libre) | Validé |
 | **MS-DOS 3.30 (`ver set 3.30`)** | 40 / 2 / 9 | 11 × 32 Ko + 2 × 512 o | 361 472 octets (`0` libre) | Validé |
 | **Injection corruption (LBA 100)** | 40 / 2 / 9 | Altération `0x30 -> 0xCF` | Détection `Cyl 5, Tête 1, Sect 2` | Validé |
+
+## 📄 License & Credits
+
+- Copyright (C) 2026 MonSieur JeAn-FReD 🇫🇷
+- **Author:** MonSieur JeAn-FReD (`https://github.com/Jean-Fred64`)
+- **Heritage:** Inspired by Harald Bögeholz's **H2testw** (full-capacity write/verify methodology).
+- **License:** Distributed under the terms of the [GNU General Public License v3.0 (GPL-3.0)](LICENSE).
