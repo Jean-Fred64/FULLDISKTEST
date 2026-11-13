@@ -373,6 +373,62 @@ static unsigned long get_free_bytes(unsigned int drive_num)
            (unsigned long)df.bytes_per_sector;
 }
 
+/* Affichage d'une barre de progression ASCII 7 bits (30 caracteres '#' et '.') */
+static void update_progress(const char *prefix,
+                            unsigned long current,
+                            unsigned long total,
+                            int reset)
+{
+    static unsigned int last_pct    = 0xFFFFU;
+    static unsigned int last_filled = 0xFFFFU;
+    unsigned int pct;
+    unsigned int filled;
+    unsigned int k;
+    char bar[31];
+
+    if (reset != 0) {
+        last_pct    = 0xFFFFU;
+        last_filled = 0xFFFFU;
+    }
+
+    if (total == 0UL || current >= total) {
+        filled = 30U;
+        pct    = 100U;
+    } else {
+        filled = (unsigned int)((current * 30UL) / total);
+        pct    = (unsigned int)((current * 100UL) / total);
+        if (filled > 30U) {
+            filled = 30U;
+        }
+        if (pct > 100U) {
+            pct = 100U;
+        }
+    }
+
+    if (reset == 0 && pct == last_pct && filled == last_filled) {
+        return;
+    }
+
+    for (k = 0U; k < 30U; k++) {
+        bar[k] = (k < filled) ? '#' : '.';
+    }
+    bar[30] = '\0';
+
+    printf("\r%s : [%s] %3u%%", prefix, bar, pct);
+    fflush(stdout);
+
+    last_pct    = pct;
+    last_filled = filled;
+}
+
+/* Wrapper de progression pour la phase [4/4] Verification */
+static void update_verify_progress(unsigned long bytes_verified,
+                                   unsigned long total_verify_bytes,
+                                   int reset)
+{
+    update_progress("[4/4] Verification", bytes_verified, total_verify_bytes, reset);
+}
+
 int main(int argc, char *argv[])
 {
     unsigned int drive_num;
@@ -388,6 +444,8 @@ int main(int argc, char *argv[])
     unsigned long initial_used_sectors;
     unsigned long total_bytes_written;
     unsigned long total_bytes_verified;
+    unsigned long total_verify_bytes;
+    unsigned long bytes_verified;
     unsigned long file_start_lba;
     unsigned long err_lba;
     unsigned int cyl;
@@ -395,6 +453,9 @@ int main(int argc, char *argv[])
     unsigned int sect;
     unsigned int b_count;
     unsigned int s_count;
+    unsigned long total_write_target;
+    unsigned long bytes_written_phase2;
+    unsigned char bar_on_line;
     unsigned int i;
     unsigned int j;
     unsigned int written;
@@ -563,48 +624,75 @@ int main(int argc, char *argv[])
         }
     } else {
         /* --- 2. ECRITURE DES BLOCS DE 32 KO (B00.H2W...) --- */
-        printf("[2/4] Ecriture par blocs de 32 Ko sur %c:...\n", drive_letter);
-        for (i = 0U; i < MAX_B_FILES; i++) {
-            free_bytes = get_free_bytes(drive_num);
-            if (free_bytes < (unsigned long)BLOCK32K_SIZE) {
-                break;
+        free_bytes = get_free_bytes(drive_num);
+        total_write_target = (free_bytes / (unsigned long)BLOCK32K_SIZE) * (unsigned long)BLOCK32K_SIZE;
+        if (total_write_target > ((unsigned long)MAX_B_FILES * (unsigned long)BLOCK32K_SIZE)) {
+            total_write_target = (unsigned long)MAX_B_FILES * (unsigned long)BLOCK32K_SIZE;
+        }
+        bytes_written_phase2 = 0UL;
+
+        if (total_write_target > 0UL) {
+            update_progress("[2/4] Ecriture    ", 0UL, total_write_target, 1);
+            bar_on_line = 1U;
+
+            for (i = 0U; i < MAX_B_FILES; i++) {
+                free_bytes = get_free_bytes(drive_num);
+                if (free_bytes < (unsigned long)BLOCK32K_SIZE) {
+                    break;
+                }
+
+                sprintf(filepath, "%c:\\B%02u.H2W", drive_letter, i);
+                file_start_lba = (unsigned long)geom.first_data_sector +
+                                 initial_used_sectors +
+                                 ((unsigned long)i * 64UL);
+
+                g_crit_err = 0;
+                rc = _dos_creat(filepath, _A_NORMAL, &handle);
+                if (rc != 0U || g_crit_err != 0U) {
+                    if (bar_on_line != 0U) {
+                        printf("\n");
+                        bar_on_line = 0U;
+                    }
+                    lba_to_chs(file_start_lba, &geom, &cyl, &head, &sect);
+                    printf("  [ERREUR] Echec creation %s -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
+                           filepath, file_start_lba, cyl, head, sect);
+                    err_flag = 1;
+                    error_count++;
+                    break;
+                }
+
+                written = 0U;
+                g_crit_err = 0;
+                rc = _dos_write(handle, buffer, BLOCK32K_SIZE, &written);
+                _dos_close(handle);
+
+                if (rc != 0U || g_crit_err != 0U || written != BLOCK32K_SIZE) {
+                    if (bar_on_line != 0U) {
+                        printf("\n");
+                        bar_on_line = 0U;
+                    }
+                    err_lba = file_start_lba + (unsigned long)(written / geom.bytes_per_sector);
+                    lba_to_chs(err_lba, &geom, &cyl, &head, &sect);
+                    printf("  [ERREUR] Echec ecriture %s (%u/%u o) -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
+                           filepath, written, BLOCK32K_SIZE, err_lba, cyl, head, sect);
+                    remove(filepath);
+                    err_flag = 1;
+                    error_count++;
+                    break;
+                }
+
+                b_count++;
+                total_bytes_written += (unsigned long)BLOCK32K_SIZE;
+                bytes_written_phase2 += (unsigned long)BLOCK32K_SIZE;
+                update_progress("[2/4] Ecriture    ", bytes_written_phase2, total_write_target, 0);
+                bar_on_line = 1U;
             }
 
-            sprintf(filepath, "%c:\\B%02u.H2W", drive_letter, i);
-            file_start_lba = (unsigned long)geom.first_data_sector +
-                             initial_used_sectors +
-                             ((unsigned long)i * 64UL);
-
-            g_crit_err = 0;
-            rc = _dos_creat(filepath, _A_NORMAL, &handle);
-            if (rc != 0U || g_crit_err != 0U) {
-                lba_to_chs(file_start_lba, &geom, &cyl, &head, &sect);
-                printf("  [ERREUR] Echec creation %s -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
-                       filepath, file_start_lba, cyl, head, sect);
-                err_flag = 1;
-                error_count++;
-                break;
+            if (bar_on_line != 0U) {
+                update_progress("[2/4] Ecriture    ", total_write_target, total_write_target, 0);
+                printf("\n");
+                bar_on_line = 0U;
             }
-
-            written = 0U;
-            g_crit_err = 0;
-            rc = _dos_write(handle, buffer, BLOCK32K_SIZE, &written);
-            _dos_close(handle);
-
-            if (rc != 0U || g_crit_err != 0U || written != BLOCK32K_SIZE) {
-                err_lba = file_start_lba + (unsigned long)(written / geom.bytes_per_sector);
-                lba_to_chs(err_lba, &geom, &cyl, &head, &sect);
-                printf("  [ERREUR] Echec ecriture %s (%u/%u o) -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
-                       filepath, written, BLOCK32K_SIZE, err_lba, cyl, head, sect);
-                remove(filepath);
-                err_flag = 1;
-                error_count++;
-                break;
-            }
-
-            b_count++;
-            total_bytes_written += (unsigned long)BLOCK32K_SIZE;
-            printf("  Bloc B%02u.H2W (32 Ko) [OK]\n", i);
         }
 
         /* --- 3. SATURATION FINALE PAR BLOCS DE 512 OCTETS (S00.H2W...) --- */
@@ -667,6 +755,12 @@ int main(int argc, char *argv[])
     flush_disk_caches(bios_drive);
 
     total_bytes_verified = 0UL;
+    total_verify_bytes   = ((unsigned long)b_count * (unsigned long)BLOCK32K_SIZE) +
+                           ((unsigned long)s_count * (unsigned long)BLOCK512_SIZE);
+    bytes_verified       = 0UL;
+
+    update_verify_progress(0UL, total_verify_bytes, 1);
+    bar_on_line = 1U;
 
     /* Verification des fichiers de 32 Ko (B00.H2W...) */
     for (i = 0U; i < b_count; i++) {
@@ -679,11 +773,18 @@ int main(int argc, char *argv[])
         g_crit_err = 0;
         rc = _dos_open(filepath, O_RDONLY, &handle);
         if (rc != 0U || g_crit_err != 0U) {
+            if (bar_on_line != 0U) {
+                printf("\n");
+                bar_on_line = 0U;
+            }
             lba_to_chs(file_start_lba, &geom, &cyl, &head, &sect);
             printf("  [ERREUR] Ouverture impossible de %s -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
                    filepath, file_start_lba, cyl, head, sect);
             err_flag = 1;
             error_count++;
+            bytes_verified += (unsigned long)BLOCK32K_SIZE;
+            update_verify_progress(bytes_verified, total_verify_bytes, 1);
+            bar_on_line = 1U;
             continue;
         }
 
@@ -693,6 +794,10 @@ int main(int argc, char *argv[])
         _dos_close(handle);
 
         if (rc != 0U || g_crit_err != 0U || bytes_read != BLOCK32K_SIZE) {
+            if (bar_on_line != 0U) {
+                printf("\n");
+                bar_on_line = 0U;
+            }
             err_lba = file_start_lba + (unsigned long)(bytes_read / geom.bytes_per_sector);
             lba_to_chs(err_lba, &geom, &cyl, &head, &sect);
             printf("  [ERREUR] Lecture physique incomplet/echec sur %s (%u/%u o) -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
@@ -704,6 +809,10 @@ int main(int argc, char *argv[])
         for (j = 0U; j < bytes_read; j++) {
             unsigned char expected = ref_pattern[j & 63U];
             if (buffer[j] != expected) {
+                if (bar_on_line != 0U) {
+                    printf("\n");
+                    bar_on_line = 0U;
+                }
                 err_lba = file_start_lba + (unsigned long)(j / geom.bytes_per_sector);
                 lba_to_chs(err_lba, &geom, &cyl, &head, &sect);
                 printf("  [ERREUR] Corruption sur %s (offset %u : attendu 0x%02X, lu 0x%02X) -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
@@ -719,6 +828,9 @@ int main(int argc, char *argv[])
         if (bytes_read == BLOCK32K_SIZE) {
             total_bytes_verified += (unsigned long)BLOCK32K_SIZE;
         }
+        bytes_verified += (unsigned long)BLOCK32K_SIZE;
+        update_verify_progress(bytes_verified, total_verify_bytes, (bar_on_line == 0U) ? 1 : 0);
+        bar_on_line = 1U;
     }
 
     /* Verification des fichiers de 512 octets (S00.H2W...) */
@@ -733,11 +845,18 @@ int main(int argc, char *argv[])
         g_crit_err = 0;
         rc = _dos_open(filepath, O_RDONLY, &handle);
         if (rc != 0U || g_crit_err != 0U) {
+            if (bar_on_line != 0U) {
+                printf("\n");
+                bar_on_line = 0U;
+            }
             lba_to_chs(file_start_lba, &geom, &cyl, &head, &sect);
             printf("  [ERREUR] Ouverture impossible de %s -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
                    filepath, file_start_lba, cyl, head, sect);
             err_flag = 1;
             error_count++;
+            bytes_verified += (unsigned long)BLOCK512_SIZE;
+            update_verify_progress(bytes_verified, total_verify_bytes, 1);
+            bar_on_line = 1U;
             continue;
         }
 
@@ -747,6 +866,10 @@ int main(int argc, char *argv[])
         _dos_close(handle);
 
         if (rc != 0U || g_crit_err != 0U || bytes_read != BLOCK512_SIZE) {
+            if (bar_on_line != 0U) {
+                printf("\n");
+                bar_on_line = 0U;
+            }
             lba_to_chs(file_start_lba, &geom, &cyl, &head, &sect);
             printf("  [ERREUR] Lecture physique incomplet/echec sur %s (%u/%u o) -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
                    filepath, bytes_read, BLOCK512_SIZE, file_start_lba, cyl, head, sect);
@@ -757,6 +880,10 @@ int main(int argc, char *argv[])
         for (j = 0U; j < bytes_read; j++) {
             unsigned char expected = ref_pattern[j & 63U];
             if (buffer[j] != expected) {
+                if (bar_on_line != 0U) {
+                    printf("\n");
+                    bar_on_line = 0U;
+                }
                 lba_to_chs(file_start_lba, &geom, &cyl, &head, &sect);
                 printf("  [ERREUR] Corruption sur %s (offset %u : attendu 0x%02X, lu 0x%02X) -> LBA %lu (Cyl %u, Tete %u, Sect %u)\n",
                        filepath, j, (unsigned int)expected, (unsigned int)buffer[j],
@@ -770,7 +897,13 @@ int main(int argc, char *argv[])
         if (bytes_read == BLOCK512_SIZE) {
             total_bytes_verified += (unsigned long)BLOCK512_SIZE;
         }
+        bytes_verified += (unsigned long)BLOCK512_SIZE;
+        update_verify_progress(bytes_verified, total_verify_bytes, (bar_on_line == 0U) ? 1 : 0);
+        bar_on_line = 1U;
     }
+
+    update_verify_progress(total_verify_bytes, total_verify_bytes, (bar_on_line == 0U) ? 1 : 0);
+    printf("\n");
 
     /* --- BILAN FINAL --- */
     printf("\n==========================================================\n");
